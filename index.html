@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FísicaCards Pro</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {} }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- MathJax -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
+      startup: { 
+        pageReady: () => { 
+          window.mathJaxLoaded = true; 
+          return MathJax.startup.defaultPageReady(); 
+        } 
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    /* Transições suaves gerais */
+    body { transition: background-color 0.3s ease, color 0.3s ease; }
+    .fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased selection:bg-indigo-200 min-h-screen pb-12 transition-colors">
+  
+  <!-- Content is rendered here by JS -->
+  <div id="app"></div>
+
+  <script>
+    // ==========================================
+    // DADOS DOS CARTÕES (19 Questões da Lista 2)
+    // ==========================================
+    const cardsData = [
+      { id: 1, question: "1. No intervalo de temperaturas de 310 a 330 K, a pressão P de certo gás não ideal está relacionada ao volume V e à temperatura T pela equação:<br><br>$$P=(24,91\\frac{J}{K})\\frac{T}{V}-(0,00662\\frac{J}{K^{2}})\\frac{T^{2}}{V}$$<br><br>Qual é o trabalho realizado pelo gás se a temperatura aumenta de 315 para 325 K enquanto a pressão permanece constante?", answer: "**Solução (Pressão Constante):**<br><br>1. O trabalho é $W = P(V_2 - V_1)$.<br>2. Isolando $V$ na equação: $V = \\frac{24,91 T - 0,00662 T^2}{P}$<br>3. Substituindo na fórmula do trabalho, a pressão $P$ cancela-se:<br>$$W = 24,91(T_f - T_i) - 0,00662(T_f^2 - T_i^2)$$<br>4. Com $T_i = 315$ e $T_f = 325$:<br>$$W = 24,91(10) - 0,00662(325^2 - 315^2)$$<br>$$W = 249,1 - 0,00662(6400)$$<br>**Resposta: $W \\approx 206,73 \\text{ J}$**" },
+      { id: 2, question: "2. Um gás ocupa um volume de 4,3 L a uma pressão de 1,2 atm e uma temperatura de 310 K. O gás é comprimido adiabaticamente para um volume de 0,76 L. Determine (a) a pressão final e (b) a temperatura final, supondo que o gás é ideal e que $\\gamma = 1,4$.", answer: "**Solução (Adiabática):**<br><br>**(a) Pressão:** $P_2 = P_1 (V_1/V_2)^\\gamma$<br>$$P_2 = 1,2 (4,3 / 0,76)^{1,4} \\approx 1,2(11,32) \\approx \\mathbf{13,6 \\text{ atm}}$$<br><br>**(b) Temperatura:** $T_2 = T_1 (V_1/V_2)^{\\gamma-1}$<br>$$T_2 = 310 (4,3 / 0,76)^{0,4} \\approx 310(2,0) = \\mathbf{620 \\text{ K}}$$" },
+      { id: 3, question: "3. Um gás ideal sofre uma compressão isotérmica de um volume inicial de $4,00 \\text{ m}^3$ para um volume final de $3,00 \\text{ m}^3$. Existem 3,50 mols do gás e a temperatura é $10,0^\\circ\\text{C}$.<br>(a) Qual é o trabalho realizado pelo gás?<br>(b) Qual é a energia trocada na forma de calor?", answer: "**Solução (Isotérmica):**<br><br>$$T = 10 + 273,15 = 283,15 \\text{ K}$$<br>**(a) Trabalho:** $W = nRT \\ln(V_f/V_i)$<br>$$W = 3,50 \\cdot 8,314 \\cdot 283,15 \\cdot \\ln(3/4) \\approx \\mathbf{-2370 \\text{ J}}$$<br>**(b) Calor:** Pela 1ª Lei, como $\\Delta U = 0$ (isotérmico), então $Q = W = \\mathbf{-2370 \\text{ J}}$." },
+      { id: 4, question: "4. Um sistema evolui do estado a até o estado b ao longo dos três caminhos (1, 2 e 3) mostrados no diagrama PV. Indique em qual dos caminhos o trabalho é menor. Em qual deles o trabalho é maior? Justifique.", answer: "**Solução (Geometria PV):**<br><br>O trabalho é a **área sob a curva** no gráfico P vs V.<br>1. **Maior Trabalho:** Caminho 1 (mais acima, maior área).<br>2. **Menor Trabalho:** Caminho 3 (mais abaixo, menor área).<br><br>Justificativa: $W = \\int P dV$. O caminho que mantém pressões médias mais altas durante a expansão realiza mais trabalho." },
+      { id: 5, question: "5. Dois mols de um gás ideal são comprimidos a uma temperatura constante de $65,0^\\circ\\text{C}$ até que a pressão original tenha triplicado. (a) Desenhe o diagrama PV. (b) Calcule o trabalho realizado.", answer: "**Solução:**<br><br>$$T = 65 + 273,15 = 338,15 \\text{ K}$$<br>Se $P_f = 3P_i$, então $V_f = V_i/3$.<br>**(b) Trabalho:** $W = nRT \\ln(V_f/V_i)$ ou $W = nRT \\ln(P_i/P_f)$<br>$$W = 2 \\cdot 8,314 \\cdot 338,15 \\cdot \\ln(1/3) \\approx \\mathbf{-6176 \\text{ J}}$$" },
+      { id: 6, question: "6. Um gás evolui de a para b. A pressão dobra de 30 kPa com V constante de $0,050 \\text{ m}^3$. 700 J de calor são fornecidos. (a) Trabalho? (b) Comparar Temperaturas? (c) Comparar Energia Interna?", answer: "**Solução (Isocórica):**<br><br>**(a) Trabalho:** Como $V$ é constante, $dV = 0 \\implies \\mathbf{W = 0}$.<br>**(b) Temperatura:** $PV=nRT$. Se $P$ dobra com $V$ constante, $T$ dobra ($T_b = 2T_a$).<br>**(c) Energia Interna:** $\\Delta U = Q - W = 700 - 0 = +700 \\text{ J}$. Logo, $U_b > U_a$ em 700 J." },
+      { id: 7, question: "7. Numa compressão isotérmica, removem-se 410 J de calor. Qual o trabalho realizado pelo gás?", answer: "**Solução:**<br><br>No processo isotérmico de gás ideal, $\\Delta U = 0$.<br>Pela 1ª Lei: $0 = Q - W \\implies W = Q$.<br>Como o calor é removido, $Q = -410 \\text{ J}$.<br>Portanto, **$W = -410 \\text{ J}$**." },
+      { id: 8, question: "8. Gás monoatômico ($\\gamma=1,67$), $P_i=1,5\\cdot 10^5$ Pa, $V_i=0,08 \\text{ m}^3$, compressão adiabática até $0,04 \\text{ m}^3$. (a) $P_f$? (b) Trabalho? (c) Razão $T_f/T_i$?", answer: "**Solução:**<br><br>**(a)** $P_2 = 1,5\\cdot 10^5 \\cdot (0,08/0,04)^{1,67} \\approx \\mathbf{4,76 \\cdot 10^5 \\text{ Pa}}$<br>**(b)** $W = \\frac{1}{\\gamma-1}(P_1V_1 - P_2V_2) = \\frac{12000 - 19040}{0,67} \\approx \\mathbf{-10560 \\text{ J}}$<br>**(c)** $T_f/T_i = (V_i/V_f)^{0,67} = 2^{0,67} \\approx \\mathbf{1,59}$. O gás aquece." },
+      { id: 9, question: "9. Ar (gás ideal) de a até b em linha reta no diagrama PV. $V_a=0,07, V_b=0,11, P_a=1,0\\cdot 10^5, P_b=1,4\\cdot 10^5$. (a) Temperatura aumenta ou diminui? (b) Trabalho?", answer: "**Solução:**<br><br>**(a)** Como $P$ e $V$ aumentam, o produto $PV$ aumenta. Logo, **a temperatura aumenta**.<br>**(b) Trabalho:** Área do trapézio: $W = \\frac{(1+1,4)\\cdot 10^5}{2} \\cdot (0,11 - 0,07) = 1,2\\cdot 10^5 \\cdot 0,04 = \\mathbf{4800 \\text{ J}}$." },
+      { id: 10, question: "10. De a para b por acb ($Q=90, W=60$). (a) Calor por adb se $W=15$? (b) De b para a por curva com $W=-35$, calor? (c) Se $U_a=0, U_d=8$, calores em ad e db?", answer: "**Solução:**<br><br>$\\Delta U_{ab} = 90 - 60 = 30 \\text{ J}$.<br>**(a)** $Q_{adb} = \\Delta U + W = 30 + 15 = \\mathbf{45 \\text{ J}}$.<br>**(b)** $Q_{ba} = \\Delta U_{ba} + W_{ba} = -30 - 35 = \\mathbf{-65 \\text{ J}}$ (Liberta calor).<br>**(c)** $Q_{ad} = \\Delta U_{ad} = 8 - 0 = \\mathbf{8 \\text{ J}}$ (se ad for isocórico). $Q_{db} = 45 - 8 = \\mathbf{37 \\text{ J}}$." },
+      { id: 11, question: "11. Motor a gasolina, Potência = 180 kW, Eficiência = 28%. (a) Calor fornecido por seg? (b) Calor rejeitado por seg?", answer: "**Solução:**<br><br>**(a)** $e = W/Q_H \\implies 0,28 = 180 / Q_H \\implies Q_H = \\mathbf{642,8 \\text{ kW}}$.<br>**(b)** $W = Q_H - Q_C \\implies Q_C = 642,8 - 180 = \\mathbf{462,8 \\text{ kW}}$." },
+      { id: 12, question: "12. Frigorífico, $K = 2,10$, absorve $3,10 \\cdot 10^4$ J do frio. (a) Trabalho necessário? (b) Calor para o quente?", answer: "**Solução:**<br><br>**(a)** $K = Q_C / W \\implies 2,1 = 3,1\\cdot 10^4 / W \\implies W \\approx \\mathbf{1,48 \\cdot 10^4 \\text{ J}}$.<br>**(b)** $Q_H = Q_C + W = 3,1\\cdot 10^4 + 1,48\\cdot 10^4 = \\mathbf{4,58 \\cdot 10^4 \\text{ J}}$." },
+      { id: 13, question: "13. Máquina de Carnot, $T_{frio} = 17^\\circ\\text{C}$, $e = 40\\%$. Quanto elevar a $T_{quente}$ para $e = 50\\%$?", answer: "**Solução:**<br><br>$T_C = 290,15 \\text{ K}$.<br>1. Inicial: $0,4 = 1 - 290,15/T_H \\implies T_H = 483,6 \\text{ K}$.<br>2. Final: $0,5 = 1 - 290,15/T_H' \\implies T_H' = 580,3 \\text{ K}$.<br>Elevação: $580,3 - 483,6 = \\mathbf{96,7 \\text{ K}}$." },
+      { id: 14, question: "14. Três máquinas de Carnot: (a) 400-500K, (b) 500-600K, (c) 400-600K. Mesma energia $Q_H$. Ordem decrescente de Trabalho?", answer: "**Solução:**<br><br>$W = e \\cdot Q_H$. Maior $e$ faz mais trabalho.<br>$e_a = 1 - 4/5 = 0,20$.<br>$e_b = 1 - 5/6 \\approx 0,17$.<br>$e_c = 1 - 4/6 \\approx 0,33$.<br>Ordem: **(c), (a), (b)**." },
+      { id: 15, question: "15. Máquina de Carnot, $e=66\\%$, $W = 2,5\\cdot 10^4$ J. (a) Calor extraído? (b) Se $T_{fria}=20^\\circ\\text{C}$, qual a $T_{quente}$?", answer: "**Solução:**<br><br>**(a)** $Q_H = W/e = 2,5\\cdot 10^4 / 0,66 \\approx \\mathbf{3,79 \\cdot 10^4 \\text{ J}}$.<br>**(b)** $0,66 = 1 - 293,15/T_H \\implies T_H = 293,15/0,34 \\approx \\mathbf{862,2 \\text{ K}}$." },
+      { id: 16, question: "16. Gota super-resfriada de 1g congela a $-25^\\circ\\text{C}$. Variação de Entropia?", answer: "**Solução (3 Etapas):**<br><br>1. Aquecer água (-25 a 0°C): $\\Delta S_1 \\approx +0,40 \\text{ J/K}$<br>2. Congelar (0°C): $\\Delta S_2 = -mL_f/273,15 \\approx -1,22 \\text{ J/K}$<br>3. Arrefecer gelo (0 a -25°C): $\\Delta S_3 \\approx -0,20 \\text{ J/K}$<br>$\\Delta S_{total} \\approx \\mathbf{-1,02 \\text{ J/K}}$ (Aproximado)." },
+      { id: 17, question: "17. Motor Otto. (a) Eficiência para $r=8,8$? (b) Aumento de eficiência para $r=9,6$? ($\\gamma=1,4$).", answer: "**Solução:**<br><br>$e = 1 - 1/r^{0,4}$<br>**(a)** $e = 1 - 1/8,8^{0,4} = 1 - 1/2,38 \\approx \\mathbf{58,0\\%}$.<br>**(b)** $e' = 1 - 1/9,6^{0,4} \\approx 59,4\\%$. Aumento de **1,4%**." },
+      { id: 18, question: "18. Fundir 0,35kg de gelo a 0°C. Fonte a 25°C. (a) $\\Delta S_{agua}$? (b) $\\Delta S_{fonte}$? (c) $\\Delta S_{total}$?", answer: "**Solução:**<br><br>**(a)** $\\Delta S_{agua} = mL_f/273,15 \\approx \\mathbf{427,9 \\text{ J/K}}$.<br>**(b)** $\\Delta S_{fonte} = -mL_f/298,15 \\approx \\mathbf{-392,1 \\text{ J/K}}$.<br>**(c)** $\\Delta S_{total} \\approx \\mathbf{35,8 \\text{ J/K}}$." },
+      { id: 19, question: "19. Metabolismo 80W (80% calor). Interior $37^\\circ\\text{C}$, pele $30^\\circ\\text{C}$. Variação de entropia por segundo?", answer: "**Solução:**<br><br>$Q/s = 0,8 \\cdot 80 = 64 \\text{ J/s}$.<br>$\\Delta S/s = -64/310,15 + 64/303,15 \\approx -0,206 + 0,211 = \\mathbf{+0,005 \\text{ J/K.s}}$." }
+    ];
+
+    const initialDecks = [
+      { id: 'lista2', title: 'Lista 2 - Termodinâmica', description: '19 questões completas resolvidas com base na aula.', cards: cardsData }
+    ];
+
+    // ==========================================
+    // ESTADO E UTILITÁRIOS (JS Vanilla)
+    // ==========================================
+    const DAILY_GOAL = 3;
+
+    let state = {
+      view: 'home',
+      darkMode: localStorage.getItem('fc_theme') === 'dark',
+      activeDeck: null,
+      appDecks: JSON.parse(localStorage.getItem('fc_decks')) || initialDecks,
+      queue: [],
+      isFlipped: false,
+      progress: JSON.parse(localStorage.getItem('fc_progress')) || {},
+      stats: JSON.parse(localStorage.getItem('fc_stats')) || { streak: 0, lastDate: '', dailyCount: 0 },
+      isCramMode: false,
+      deferredPrompt: null
+    };
+
+    const getTodayStr = () => new Date().toISOString().split('T')[0];
+    const addDays = (days) => {
+      const d = new Date(); d.setDate(d.getDate() + days);
+      return d.toISOString().split('T')[0];
+    };
+    const shuffleArray = (array) => {
+      const newArr = [...array];
+      for (let i = newArr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+      }
+      return newArr;
+    };
+
+    // Inicializar data (Streak/Daily reset)
+    const today = getTodayStr();
+    if (state.stats.lastDate !== today) {
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+      if (state.stats.lastDate !== yesterday.toISOString().split('T')[0] && state.stats.lastDate !== '') {
+        state.stats.streak = 0;
+      }
+      state.stats.dailyCount = 0;
+      state.stats.lastDate = today;
+      localStorage.setItem('fc_stats', JSON.stringify(state.stats));
+    }
+
+    // Configurar Dark Mode
+    if (state.darkMode) document.documentElement.classList.add('dark');
+
+    // ==========================================
+    // PWA SETUP DINÂMICO
+    // ==========================================
+    function setupPWA() {
+      // Manifest Virtual
+      const manifest = {
+        name: "FísicaCards Pro", short_name: "FísicaCards", description: "Flashcards de Termodinâmica",
+        start_url: ".", display: "standalone", background_color: "#0f172a", theme_color: "#4f46e5",
+        icons: [{
+          src: "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="100" fill="#4f46e5"/><path d="M256 120 C180 120 120 180 120 256 C120 332 180 392 256 392 C332 392 392 332 392 256 C392 180 332 120 256 120 Z" fill="#ffffff"/></svg>'),
+          sizes: "512x512", type: "image/svg+xml", purpose: "any maskable"
+        }]
+      };
+      const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = URL.createObjectURL(manifestBlob);
+      document.head.appendChild(link);
+
+      // Service Worker (Para cache offline)
+      const swCode = `
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('activate', e => self.clients.claim());
+        self.addEventListener('fetch', e => { e.respondWith(fetch(e.request).catch(() => new Response('PWA Offline Mode'))); });
+      `;
+      const swBlob = new Blob([swCode], {type: 'application/javascript'});
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.error);
+      }
+
+      // Intercetar prompt de Instalação
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        state.deferredPrompt = e;
+        render(); // Rerender para mostrar o botão
+      });
+    }
+    setupPWA();
+
+    // ==========================================
+    // FUNÇÕES DE LÓGICA (Acessíveis globalmente)
+    // ==========================================
+    window.toggleTheme = () => {
+      state.darkMode = !state.darkMode;
+      localStorage.setItem('fc_theme', state.darkMode ? 'dark' : 'light');
+      if (state.darkMode) document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+      render();
+    };
+
+    window.setView = (viewName) => {
+      state.view = viewName;
+      render();
+    };
+
+    window.startSession = (deckId) => {
+      const deck = state.appDecks.find(d => d.id === deckId);
+      state.activeDeck = deck;
+      const t = getTodayStr();
+      const due = deck.cards.filter(c => !state.progress[c.id] || state.progress[c.id].next <= t);
+      state.queue = shuffleArray(due.map(c => c.id));
+      state.isFlipped = false;
+      state.isCramMode = false;
+      window.setView('study');
+    };
+
+    window.startCramSession = (deckId) => {
+      const deck = state.appDecks.find(d => d.id === deckId);
+      state.activeDeck = deck;
+      state.queue = shuffleArray(deck.cards.map(c => c.id));
+      state.isFlipped = false;
+      state.isCramMode = true;
+      window.setView('study');
+    };
+
+    window.setIsFlipped = (val) => {
+      state.isFlipped = val;
+      render();
+    };
+
+    window.handleRating = (rating) => {
+      const cardId = state.queue[0];
+      state.queue.shift();
+
+      if (state.isCramMode) {
+        if (rating === 'again') state.queue.push(cardId);
+      } else {
+        const t = getTodayStr();
+        if (rating === 'again') {
+          state.queue.push(cardId);
+          state.progress[cardId] = { state: 'learning', next: t };
+        } else {
+          const days = rating === 'easy' ? 4 : 1;
+          state.progress[cardId] = { state: rating === 'easy' ? 'mastered' : 'learning', next: addDays(days) };
+          
+          if (state.stats.dailyCount === 0) state.stats.streak++;
+          state.stats.dailyCount++;
+          localStorage.setItem('fc_stats', JSON.stringify(state.stats));
+        }
+        localStorage.setItem('fc_progress', JSON.stringify(state.progress));
+      }
+      state.isFlipped = false;
+      render();
+    };
+
+    window.saveNewCard = () => {
+      const newQ = document.getElementById('input-q').value;
+      const newA = document.getElementById('input-a').value;
+      if (!newQ.trim() || !newA.trim()) return;
+      
+      const newCard = { id: Date.now(), question: newQ, answer: newA };
+      state.appDecks[0].cards.push(newCard);
+      localStorage.setItem('fc_decks', JSON.stringify(state.appDecks));
+      window.setView('home');
+    };
+
+    window.exportData = () => {
+      const data = { decks: state.appDecks, progress: state.progress, stats: state.stats };
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `fisicacards_backup_${getTodayStr()}.json`;
+      a.click();
+    };
+
+    window.importData = (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.decks) { state.appDecks = data.decks; localStorage.setItem('fc_decks', JSON.stringify(data.decks)); }
+          if (data.progress) { state.progress = data.progress; localStorage.setItem('fc_progress', JSON.stringify(data.progress)); }
+          if (data.stats) { state.stats = data.stats; localStorage.setItem('fc_stats', JSON.stringify(data.stats)); }
+          alert('Dados importados com sucesso!');
+          render();
+        } catch (err) { alert('Ficheiro inválido ou corrompido.'); }
+      };
+      reader.readAsText(file);
+    };
+
+    window.handleInstallApp = async () => {
+      if (!state.deferredPrompt) return;
+      state.deferredPrompt.prompt();
+      const { outcome } = await state.deferredPrompt.userChoice;
+      if (outcome === 'accepted') { state.deferredPrompt = null; render(); }
+    };
+
+    // ==========================================
+    // RENDERIZAÇÃO DE HTML TEMPLATES
+    // ==========================================
+    function renderHome() {
+      const masteredCount = Object.values(state.progress).filter(p => p.state === 'mastered').length;
+      const learningCount = Object.values(state.progress).filter(p => p.state === 'learning').length;
+
+      let decksHtml = state.appDecks.map(deck => `
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border dark:border-slate-700 shadow-sm transition-all group mb-4">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h3 class="text-2xl font-bold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">${deck.title}</h3>
+              <p class="text-slate-500 mt-2">${deck.description}</p>
+              <p class="text-sm font-semibold text-indigo-500 mt-1">${deck.cards.length} cartões no total</p>
+            </div>
+            <div class="flex gap-2 w-full sm:w-auto">
+              <button onclick="window.startCramSession('${deck.id}')" class="flex-1 sm:flex-none bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors" title="Revisar todos os cartões">
+                <i data-lucide="zap" class="w-5 h-5"></i> Véspera
+              </button>
+              <button onclick="window.startSession('${deck.id}')" class="flex-1 sm:flex-none bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 px-6 py-3 rounded-xl font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
+                Estudar
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      let installBtnHtml = state.deferredPrompt ? `
+        <button onclick="window.handleInstallApp()" class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-md">
+          <i data-lucide="smartphone" class="w-5 h-5"></i> Instalar App
+        </button>
+      ` : '';
+
+      return `
+        <div class="p-4 sm:p-8 max-w-4xl mx-auto fade-in">
+          <header class="flex justify-between items-center mb-10">
+            <div class="flex items-center gap-3 text-indigo-600 dark:text-indigo-400">
+              <i data-lucide="brain" class="w-10 h-10"></i>
+              <h1 class="text-3xl font-black">FísicaCards</h1>
+            </div>
+            <button onclick="window.toggleTheme()" class="p-3 bg-white dark:bg-slate-800 rounded-full shadow-sm border dark:border-slate-700 text-slate-600 dark:text-slate-300">
+              <i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-6 h-6"></i>
+            </button>
+          </header>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border dark:border-slate-700 shadow-sm flex items-center gap-4">
+              <div class="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><i data-lucide="flame" class="text-orange-500 w-6 h-6"></i></div>
+              <div><div class="text-2xl font-black">${state.stats.streak} dias</div><div class="text-sm opacity-50 font-bold uppercase tracking-wider">Streak</div></div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border dark:border-slate-700 shadow-sm flex items-center gap-4">
+              <div class="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><i data-lucide="trophy" class="text-emerald-500 w-6 h-6"></i></div>
+              <div><div class="text-2xl font-black">${masteredCount}</div><div class="text-sm opacity-50 font-bold uppercase tracking-wider">Dominados</div></div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border dark:border-slate-700 shadow-sm flex items-center gap-4">
+              <div class="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl"><i data-lucide="bar-chart-2" class="text-blue-500 w-6 h-6"></i></div>
+              <div><div class="text-2xl font-black">${learningCount}</div><div class="text-sm opacity-50 font-bold uppercase tracking-wider">A Estudar</div></div>
+            </div>
+          </div>
+
+          <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+            <i data-lucide="layers" class="w-6 h-6"></i> Teus Baralhos
+          </h2>
+          ${decksHtml}
+
+          <div class="mt-10 pt-10 border-t dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <button onclick="window.setView('addCard')" class="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 dark:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all">
+              <i data-lucide="plus" class="w-5 h-5"></i> Criar Novo Cartão
+            </button>
+            <div class="flex gap-2 w-full sm:w-auto">
+              ${installBtnHtml}
+              <button onclick="window.exportData()" class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                <i data-lucide="download" class="w-5 h-5"></i> Exportar
+              </button>
+              <label class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+                <i data-lucide="upload" class="w-5 h-5"></i> Importar
+                <input type="file" accept=".json" onchange="window.importData(event)" class="hidden" />
+              </label>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderStudy() {
+      const isGoalMet = state.stats.dailyCount >= DAILY_GOAL;
+      
+      let headerTargetHtml = state.isCramMode 
+        ? `<div class="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 border px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> Véspera</div>`
+        : `<div class="px-4 py-1 rounded-full border text-sm font-bold flex items-center gap-2 ${isGoalMet ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-slate-100 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}">
+            <i data-lucide="${isGoalMet ? 'flame' : 'target'}" class="w-4 h-4 ${isGoalMet ? 'text-orange-500' : ''}"></i> ${state.stats.dailyCount}/${DAILY_GOAL} Hoje
+           </div>`;
+
+      let mainContent = '';
+      if (state.queue.length === 0) {
+        mainContent = `
+          <div class="text-center py-20 fade-in">
+            <i data-lucide="trophy" class="mx-auto text-yellow-500 mb-6 w-20 h-20"></i>
+            <h2 class="text-4xl font-black mb-4">Sessão Finalizada!</h2>
+            <p class="text-xl opacity-60 mb-10">${state.isCramMode ? "Revisão intensiva de Véspera concluída com sucesso." : "Revisaste tudo o que era necessário para hoje."}</p>
+            <button onclick="window.setView('home')" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-colors">Voltar à Home</button>
+          </div>
+        `;
+      } else {
+        const card = state.activeDeck.cards.find(c => c.id === state.queue[0]);
+        mainContent = `
+          <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border dark:border-slate-700 overflow-hidden min-h-[450px] flex flex-col fade-in">
+            <div class="p-8 flex-1">
+              <div class="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest mb-6">
+                <i data-lucide="book-open" class="w-4 h-4"></i> Questão ${card.id}
+              </div>
+              <div class="text-xl leading-relaxed prose prose-indigo dark:prose-invert max-w-none">${card.question}</div>
+            </div>
+            ${state.isFlipped ? `
+              <div class="p-8 bg-indigo-50/50 dark:bg-indigo-900/10 border-t dark:border-slate-700 fade-in">
+                <div class="text-indigo-600 dark:text-indigo-400 font-bold uppercase text-xs mb-4 tracking-widest">Resolução Passo a Passo</div>
+                <div class="text-lg leading-relaxed text-slate-700 dark:text-slate-300 prose prose-indigo dark:prose-invert max-w-none">${card.answer}</div>
+              </div>
+            ` : ''}
+          </div>
+          
+          <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+            ${!state.isFlipped ? `
+              <button onclick="window.setIsFlipped(true)" class="bg-slate-900 dark:bg-slate-700 text-white px-12 py-5 rounded-2xl font-bold text-xl shadow-lg hover:scale-105 transition-transform">
+                Ver Resposta
+              </button>
+            ` : `
+              <button onclick="window.handleRating('again')" class="flex-1 bg-rose-100 text-rose-700 border border-rose-200 py-5 rounded-2xl font-bold flex items-center justify-center gap-2 dark:bg-rose-900/30 dark:border-rose-800/30 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-900/50 transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i> Errei
+              </button>
+              <button onclick="window.handleRating('hard')" class="flex-1 bg-amber-100 text-amber-700 border border-amber-200 py-5 rounded-2xl font-bold flex items-center justify-center gap-2 dark:bg-amber-900/30 dark:border-amber-800/30 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors">
+                ${state.isCramMode ? "Difícil" : "Difícil (Amanhã)"}
+              </button>
+              <button onclick="window.handleRating('easy')" class="flex-1 bg-emerald-100 text-emerald-700 border border-emerald-200 py-5 rounded-2xl font-bold flex items-center justify-center gap-2 dark:bg-emerald-900/30 dark:border-emerald-800/30 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors">
+                <i data-lucide="check" class="w-5 h-5"></i> ${state.isCramMode ? "Fácil" : "Fácil (4 dias)"}
+              </button>
+            `}
+          </div>
+        `;
+      }
+
+      return `
+        <nav class="bg-white dark:bg-slate-800 border-b dark:border-slate-700 p-4 sticky top-0 z-20">
+          <div class="max-w-3xl mx-auto flex justify-between items-center">
+            <button onclick="window.setView('home')" class="flex items-center gap-2 font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+              <i data-lucide="chevron-left" class="w-5 h-5"></i> Sair
+            </button>
+            <div class="flex items-center gap-4">
+              ${headerTargetHtml}
+              <span class="text-sm font-bold opacity-50">Faltam: ${state.queue.length}</span>
+            </div>
+          </div>
+        </nav>
+        <main class="max-w-3xl mx-auto p-4 py-10">
+          ${mainContent}
+        </main>
+      `;
+    }
+
+    function renderAddCard() {
+      return `
+        <div class="p-4 sm:p-8 max-w-3xl mx-auto fade-in">
+          <header class="mb-8 flex items-center justify-between">
+            <button onclick="window.setView('home')" class="flex items-center gap-2 font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+              <i data-lucide="chevron-left" class="w-5 h-5"></i> Voltar
+            </button>
+            <h1 class="text-2xl font-black">Adicionar Cartão</h1>
+            <div class="w-20"></div>
+          </header>
+          <div class="bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-3xl shadow-lg border dark:border-slate-700">
+            <div class="mb-6">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Pergunta (Suporta $ e $$ para fórmulas LaTeX)</label>
+              <textarea id="input-q" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[150px] text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Qual é a fórmula do trabalho isotérmico?"></textarea>
+            </div>
+            <div class="mb-8">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Resposta / Solução</label>
+              <textarea id="input-a" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[150px] text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ex: $$W = nRT \\ln(V_f/V_i)$$"></textarea>
+            </div>
+            <button onclick="window.saveNewCard()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-lg shadow-md">
+              <i data-lucide="save" class="w-5 h-5"></i> Guardar no Baralho
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Função Principal de Renderização
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (state.view === 'home') app.innerHTML = renderHome();
+      else if (state.view === 'study') app.innerHTML = renderStudy();
+      else if (state.view === 'addCard') app.innerHTML = renderAddCard();
+
+      // Instanciar ícones SVG Lucide
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+
+      // Renderizar Matemática LaTeX
+      if (window.mathJaxLoaded && window.MathJax && window.MathJax.typesetPromise) {
+        MathJax.typesetPromise();
+      }
+    }
+
+    // Arranque inicial
+    document.addEventListener('DOMContentLoaded', () => {
+      render();
+    });
+
+  </script>
+</body>
+</html>
