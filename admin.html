@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FísicaCards - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: {} } }
+  </script>
+  <style>
+    body { transition: background-color 0.3s ease; }
+    .fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen font-sans antialiased">
+
+<div id="app"></div>
+
+<script>
+  // ==========================================
+  // CONFIG
+  // ==========================================
+  const ADMIN_PASSWORD = 'perola26';
+  const RANKING_SHEET_ID = '1g_bOnh8xG3R017qh8sTV_erTEeTklyrusWimPaEeD4E';
+  const GOOGLE_CLIENT_ID = '972704820676-vdia9sh186trde1mjv5h87d3igimvj3f.apps.googleusercontent.com';
+  const SCOPES = 'openid email profile https://www.googleapis.com/auth/spreadsheets';
+
+  // ==========================================
+  // DADOS DAS CARTAS (mesmos do index.html)
+  // ==========================================
+  let cards = [
+    { id: 1, question: "1. No intervalo de temperaturas de 310 a 330 K, a pressão P de certo gás não ideal está relacionada ao volume V e à temperatura T pela equação P=(24,91 J/K)T/V−(0,00662 J/K²)T²/V. Qual é o trabalho realizado pelo gás se a temperatura aumenta de 315 para 325 K enquanto a pressão permanece constante?", answer: "W ≈ 206,73 J" },
+    { id: 2, question: "2. Um gás ocupa um volume de 4,3 L a uma pressão de 1,2 atm e temperatura de 310 K. O gás é comprimido adiabaticamente para 0,76 L. Determine (a) a pressão final e (b) a temperatura final (γ = 1,4).", answer: "(a) P₂ ≈ 13,6 atm  (b) T₂ ≈ 620 K" },
+    { id: 3, question: "3. Um gás ideal sofre compressão isotérmica de 4,00 m³ para 3,00 m³. n=3,50 mol, T=10°C. (a) Trabalho? (b) Calor?", answer: "(a) W ≈ −2370 J  (b) Q ≈ −2370 J" },
+    { id: 4, question: "4. Sistema evolui de a até b por três caminhos no diagrama PV. Qual tem maior e menor trabalho?", answer: "Maior: caminho 1. Menor: caminho 3." },
+    { id: 5, question: "5. Dois mols de gás ideal comprimidos a 65°C até a pressão triplicar. Calcule o trabalho.", answer: "W ≈ −6176 J" },
+    { id: 6, question: "6. Gás evolui de a para b com V constante (0,050 m³), pressão dobra de 30 kPa, 700 J de calor fornecidos. (a) Trabalho? (b) Temperaturas? (c) Energia interna?", answer: "(a) W=0  (b) Tb=2Ta  (c) ΔU=+700 J" },
+    { id: 7, question: "7. Numa compressão isotérmica removem-se 410 J de calor. Qual o trabalho realizado pelo gás?", answer: "W = −410 J" },
+    { id: 8, question: "8. Gás monoatômico (γ=1,67), Pi=1,5×10⁵ Pa, Vi=0,08 m³, compressão adiabática para 0,04 m³. (a) Pf? (b) Trabalho? (c) Tf/Ti?", answer: "(a) 4,76×10⁵ Pa  (b) −10560 J  (c) 1,59" },
+    { id: 9, question: "9. Ar de a até b em linha reta no PV. Va=0,07, Vb=0,11, Pa=1,0×10⁵, Pb=1,4×10⁵. (a) Temperatura? (b) Trabalho?", answer: "(a) Aumenta  (b) 4800 J" },
+    { id: 10, question: "10. De a para b por acb (Q=90, W=60). (a) Calor por adb se W=15? (b) De b para a com W=−35? (c) Se Ua=0, Ud=8, calores em ad e db?", answer: "(a) 45 J  (b) −65 J  (c) 8 J e 37 J" },
+    { id: 11, question: "11. Motor a gasolina, Potência=180 kW, e=28%. (a) Calor fornecido/s? (b) Calor rejeitado/s?", answer: "(a) 642,8 kW  (b) 462,8 kW" },
+    { id: 12, question: "12. Frigorífico, K=2,10, absorve 3,10×10⁴ J do frio. (a) Trabalho? (b) Calor para o quente?", answer: "(a) 1,48×10⁴ J  (b) 4,58×10⁴ J" },
+    { id: 13, question: "13. Máquina de Carnot, Tfrio=17°C, e=40%. Quanto elevar Tquente para e=50%?", answer: "Elevar 96,7 K" },
+    { id: 14, question: "14. Três máquinas de Carnot: (a) 400-500K, (b) 500-600K, (c) 400-600K. Mesma QH. Ordem decrescente de trabalho?", answer: "(c), (a), (b)" },
+    { id: 15, question: "15. Máquina de Carnot, e=66%, W=2,5×10⁴ J. (a) Calor extraído? (b) Tquente se Tfria=20°C?", answer: "(a) 3,79×10⁴ J  (b) 862,2 K" },
+    { id: 16, question: "16. Gota super-resfriada de 1g congela a −25°C. Variação de Entropia?", answer: "ΔS ≈ −1,02 J/K" },
+    { id: 17, question: "17. Motor Otto. (a) Eficiência para r=8,8? (b) Aumento para r=9,6? (γ=1,4)", answer: "(a) 58,0%  (b) +1,4%" },
+    { id: 18, question: "18. Fundir 0,35 kg de gelo a 0°C. Fonte a 25°C. (a) ΔSágua? (b) ΔSfonte? (c) ΔStotal?", answer: "(a) 427,9 J/K  (b) −392,1 J/K  (c) 35,8 J/K" },
+    { id: 19, question: "19. Metabolismo 80W (80% calor). Interior 37°C, pele 30°C. ΔS por segundo?", answer: "+0,005 J/(K·s)" },
+  ];
+
+  // ==========================================
+  // ESTADO
+  // ==========================================
+  let state = {
+    view: 'login',   // login | dashboard | cards | ranking | editCard | newCard
+    accessToken: null,
+    ranking: [],
+    rankingLoading: false,
+    editingCard: null,
+    darkMode: localStorage.getItem('admin_theme') === 'dark',
+  };
+
+  if (state.darkMode) document.documentElement.classList.add('dark');
+
+  // ==========================================
+  // GOOGLE OAUTH
+  // ==========================================
+  let tokenClient = null;
+
+  function initGoogleAuth() {
+    if (!window.google) { setTimeout(initGoogleAuth, 200); return; }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: SCOPES,
+      prompt: 'consent',
+      callback: async (resp) => {
+        if (resp.error) { alert('Erro no login Google'); return; }
+        state.accessToken = resp.access_token;
+        loadRanking();
+      }
+    });
+  }
+
+  async function sheetsGet(range) {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/${encodeURIComponent(range)}`, {
+      headers: { Authorization: `Bearer ${state.accessToken}` }
+    });
+    if (!res.ok) throw new Error(`Sheets ${res.status}`);
+    return res.json();
+  }
+
+  async function sheetsPut(range, values) {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values })
+    });
+    if (!res.ok) throw new Error(`Sheets ${res.status}`);
+    return res.json();
+  }
+
+  async function loadRanking() {
+    state.rankingLoading = true;
+    render();
+    try {
+      const data = await sheetsGet('Ranking!A2:D1000');
+      const rows = data.values || [];
+      state.ranking = rows
+        .filter(r => r[0] && r[2])
+        .map(r => ({ name: r[0], email: r[1], streak: parseInt(r[2]) || 0, picture: r[3] || '' }))
+        .sort((a, b) => b.streak - a.streak);
+    } catch (e) {
+      console.error(e);
+      state.ranking = [];
+    }
+    state.rankingLoading = false;
+    render();
+  }
+
+  async function removeFromRanking(email) {
+    if (!confirm(`Remover ${email} do ranking?`)) return;
+    try {
+      const data = await sheetsGet('Ranking!A2:D1000');
+      const rows = data.values || [];
+      const filtered = rows.filter(r => r[1] !== email);
+      // Limpa tudo e reescreve
+      await sheetsPut('Ranking!A2:D1000', Array(rows.length).fill(['', '', '', '']));
+      if (filtered.length > 0) await sheetsPut('Ranking!A2:D' + (filtered.length + 1), filtered);
+      await loadRanking();
+    } catch (e) {
+      alert('Erro ao remover: ' + e.message);
+    }
+  }
+
+  // ==========================================
+  // RENDER
+  // ==========================================
+  function render() {
+    const app = document.getElementById('app');
+    if (state.view === 'login') app.innerHTML = renderLogin();
+    else if (state.view === 'dashboard') app.innerHTML = renderDashboard();
+    else if (state.view === 'cards') app.innerHTML = renderCards();
+    else if (state.view === 'ranking') app.innerHTML = renderRanking();
+    else if (state.view === 'editCard') app.innerHTML = renderEditCard();
+    else if (state.view === 'newCard') app.innerHTML = renderNewCard();
+  }
+
+  function renderLogin() {
+    return `
+      <div class="min-h-screen flex items-center justify-center p-6 fade-in">
+        <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border dark:border-slate-700 p-10 w-full max-w-sm text-center">
+          <div class="text-5xl mb-4">🔐</div>
+          <h1 class="text-2xl font-black mb-2">Área do Admin</h1>
+          <p class="text-slate-400 text-sm mb-8">FísicaCards Pro</p>
+          <input id="pwd-input" type="password" placeholder="Senha" onkeydown="if(event.key==='Enter') window.checkPassword()"
+            class="w-full border dark:border-slate-600 bg-slate-50 dark:bg-slate-900 rounded-xl px-4 py-3 text-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button onclick="window.checkPassword()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors text-lg">
+            Entrar
+          </button>
+          <p id="pwd-error" class="text-rose-500 text-sm mt-4 hidden">Senha incorreta.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDashboard() {
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Dashboard')}
+        <div class="max-w-4xl mx-auto p-6 grid grid-cols-1 sm:grid-cols-3 gap-6 mt-8">
+          <button onclick="window.goTo('cards')" class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-8 shadow hover:shadow-md transition-all text-left hover:border-indigo-400">
+            <div class="text-4xl mb-3">📝</div>
+            <div class="text-xl font-black">Cartões</div>
+            <div class="text-slate-400 text-sm mt-1">${cards.length} cartões no baralho</div>
+          </button>
+          <button onclick="window.goTo('ranking')" class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-8 shadow hover:shadow-md transition-all text-left hover:border-amber-400">
+            <div class="text-4xl mb-3">🏆</div>
+            <div class="text-xl font-black">Ranking</div>
+            <div class="text-slate-400 text-sm mt-1">${state.ranking.length} usuários</div>
+          </button>
+          <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-8 shadow text-left">
+            <div class="text-4xl mb-3">📊</div>
+            <div class="text-xl font-black">Stats</div>
+            <div class="text-slate-400 text-sm mt-1">Streak máximo: ${state.ranking.length > 0 ? state.ranking[0].streak + ' dias' : '—'}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderCards() {
+    const rows = cards.map((c, i) => `
+      <tr class="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+        <td class="py-3 px-4 text-slate-400 font-mono text-sm">${c.id}</td>
+        <td class="py-3 px-4 text-sm max-w-xs truncate">${c.question.substring(0, 80)}...</td>
+        <td class="py-3 px-4 text-sm text-slate-500 max-w-xs truncate">${c.answer.substring(0, 60)}...</td>
+        <td class="py-3 px-4 flex gap-2">
+          <button onclick="window.editCard(${i})" class="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors">Editar</button>
+          <button onclick="window.deleteCard(${i})" class="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-3 py-1 rounded-lg text-sm font-bold hover:bg-rose-100 transition-colors">Deletar</button>
+        </td>
+      </tr>
+    `).join('');
+
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Cartões')}
+        <div class="max-w-6xl mx-auto p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-black">${cards.length} cartões</h2>
+            <button onclick="window.goTo('newCard')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold transition-colors flex items-center gap-2">
+              + Novo Cartão
+            </button>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow border dark:border-slate-700 overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b dark:border-slate-700 text-left text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <th class="py-3 px-4">#</th>
+                  <th class="py-3 px-4">Pergunta</th>
+                  <th class="py-3 px-4">Resposta</th>
+                  <th class="py-3 px-4">Ações</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderRanking() {
+    const medals = ['🥇', '🥈', '🥉'];
+    const rows = state.rankingLoading
+      ? `<div class="text-center py-10 text-slate-400">Carregando...</div>`
+      : state.ranking.length === 0
+        ? `<div class="text-center py-10 text-slate-400">Nenhum usuário ainda.</div>`
+        : state.ranking.map((u, i) => `
+            <tr class="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              <td class="py-3 px-4 text-xl">${medals[i] || '#' + (i + 1)}</td>
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-3">
+                  <img src="${u.picture}" class="w-8 h-8 rounded-full" onerror="this.style.display='none'" />
+                  <div>
+                    <div class="font-bold text-sm">${u.name}</div>
+                    <div class="text-xs text-slate-400">${u.email}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3 px-4 font-black text-orange-500">${u.streak} 🔥</td>
+              <td class="py-3 px-4">
+                <button onclick="window.removeFromRanking('${u.email}')" class="bg-rose-50 dark:bg-rose-900/30 text-rose-600 px-3 py-1 rounded-lg text-sm font-bold hover:bg-rose-100 transition-colors">Remover</button>
+              </td>
+            </tr>
+          `).join('');
+
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Ranking')}
+        <div class="max-w-4xl mx-auto p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-black">${state.ranking.length} usuários</h2>
+            <button onclick="window.loadRanking()" class="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 px-4 py-2 rounded-xl text-sm font-bold transition-colors">Atualizar</button>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow border dark:border-slate-700 overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b dark:border-slate-700 text-left text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <th class="py-3 px-4">Pos</th>
+                  <th class="py-3 px-4">Usuário</th>
+                  <th class="py-3 px-4">Streak</th>
+                  <th class="py-3 px-4">Ações</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderEditCard() {
+    const c = state.editingCard;
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Editar Cartão #' + c.id)}
+        <div class="max-w-3xl mx-auto p-6">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow border dark:border-slate-700 p-8">
+            <div class="mb-6">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Pergunta</label>
+              <textarea id="edit-q" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[120px] text-base focus:outline-none focus:ring-2 focus:ring-indigo-500">${c.question}</textarea>
+            </div>
+            <div class="mb-8">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Resposta</label>
+              <textarea id="edit-a" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[120px] text-base focus:outline-none focus:ring-2 focus:ring-indigo-500">${c.answer}</textarea>
+            </div>
+            <div class="flex gap-3">
+              <button onclick="window.saveEditCard()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors">Salvar</button>
+              <button onclick="window.goTo('cards')" class="flex-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderNewCard() {
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Novo Cartão')}
+        <div class="max-w-3xl mx-auto p-6">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow border dark:border-slate-700 p-8">
+            <div class="mb-6">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Pergunta</label>
+              <textarea id="new-q" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[120px] text-base focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Digite a pergunta..."></textarea>
+            </div>
+            <div class="mb-8">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Resposta</label>
+              <textarea id="new-a" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[120px] text-base focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Digite a resposta..."></textarea>
+            </div>
+            <div class="flex gap-3">
+              <button onclick="window.saveNewCard()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors">Adicionar</button>
+              <button onclick="window.goTo('cards')" class="flex-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function navbar(title) {
+    return `
+      <nav class="bg-white dark:bg-slate-800 border-b dark:border-slate-700 px-6 py-4 sticky top-0 z-20 shadow-sm">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+          <div class="flex items-center gap-4">
+            <button onclick="window.goTo('dashboard')" class="text-slate-400 hover:text-slate-800 dark:hover:text-white font-bold transition-colors text-sm">← Dashboard</button>
+            <span class="text-slate-300 dark:text-slate-600">|</span>
+            <span class="font-black text-lg">🔐 ${title}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="window.toggleTheme()" class="p-2 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors">
+              ${state.darkMode ? '☀️' : '🌙'}
+            </button>
+            <button onclick="window.logout()" class="text-sm text-rose-500 hover:underline font-bold">Sair</button>
+          </div>
+        </div>
+      </nav>
+    `;
+  }
+
+  // ==========================================
+  // AÇÕES
+  // ==========================================
+  window.checkPassword = () => {
+    const pwd = document.getElementById('pwd-input').value;
+    if (pwd === ADMIN_PASSWORD) {
+      state.view = 'dashboard';
+      render();
+      // Login Google para acessar ranking
+      if (!window.google) {
+        setTimeout(() => { if (tokenClient) tokenClient.requestAccessToken(); }, 1000);
+      } else if (tokenClient) {
+        tokenClient.requestAccessToken();
+      }
+    } else {
+      document.getElementById('pwd-error').classList.remove('hidden');
+    }
+  };
+
+  window.goTo = (view) => {
+    state.view = view;
+    render();
+  };
+
+  window.logout = () => {
+    state.view = 'login';
+    state.accessToken = null;
+    render();
+  };
+
+  window.toggleTheme = () => {
+    state.darkMode = !state.darkMode;
+    localStorage.setItem('admin_theme', state.darkMode ? 'dark' : 'light');
+    if (state.darkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    render();
+  };
+
+  window.editCard = (index) => {
+    state.editingCard = { ...cards[index], index };
+    state.view = 'editCard';
+    render();
+  };
+
+  window.saveEditCard = () => {
+    const q = document.getElementById('edit-q').value.trim();
+    const a = document.getElementById('edit-a').value.trim();
+    if (!q || !a) return alert('Preencha todos os campos.');
+    cards[state.editingCard.index].question = q;
+    cards[state.editingCard.index].answer = a;
+    alert('Cartão atualizado! Lembre de copiar as mudanças para o index.html.');
+    state.view = 'cards';
+    render();
+  };
+
+  window.deleteCard = (index) => {
+    if (!confirm(`Deletar cartão #${cards[index].id}?`)) return;
+    cards.splice(index, 1);
+    render();
+  };
+
+  window.saveNewCard = () => {
+    const q = document.getElementById('new-q').value.trim();
+    const a = document.getElementById('new-a').value.trim();
+    if (!q || !a) return alert('Preencha todos os campos.');
+    const newId = Math.max(...cards.map(c => c.id)) + 1;
+    cards.push({ id: newId, question: q, answer: a });
+    alert('Cartão adicionado! Lembre de copiar as mudanças para o index.html.');
+    state.view = 'cards';
+    render();
+  };
+
+  window.loadRanking = loadRanking;
+  window.removeFromRanking = removeFromRanking;
+
+  // ==========================================
+  // INIT
+  // ==========================================
+  document.addEventListener('DOMContentLoaded', () => {
+    render();
+    initGoogleAuth();
+  });
+</script>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+</body>
+</html>
