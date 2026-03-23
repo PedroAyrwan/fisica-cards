@@ -53,7 +53,7 @@
     // CONFIGURAÇÃO GOOGLE
     // ==========================================
     const GOOGLE_CLIENT_ID = '972704820676-vdia9sh186trde1mjv5h87d3igimvj3f.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+    const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
     const SHEET_TITLE = 'FísicaCards - Progresso';
 
     // ==========================================
@@ -197,27 +197,21 @@
       return res.json();
     }
 
-    async function driveRequest(method, endpoint, body) {
-      const res = await fetch(`https://www.googleapis.com/drive/v3${endpoint}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${state.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: body ? JSON.stringify(body) : undefined
-      });
-      if (!res.ok) throw new Error(`Drive API ${res.status}`);
-      return res.json();
-    }
-
-    // Procura planilha existente ou cria uma nova
+    // Procura planilha existente (via localStorage) ou cria uma nova
     async function findOrCreateSpreadsheet() {
-      // Buscar no Drive
-      const query = encodeURIComponent(`name='${SHEET_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
-      const list = await driveRequest('GET', `/files?q=${query}&fields=files(id,name)`);
-      if (list.files && list.files.length > 0) {
-        return list.files[0].id;
+      const storageKey = `fc_sheet_${state.user.email}`;
+      const savedId = localStorage.getItem(storageKey);
+
+      // Verificar se o ID salvo ainda é válido
+      if (savedId) {
+        try {
+          await sheetsRequest('GET', `/${savedId}/values/Stats!A1:A1`);
+          return savedId;
+        } catch (e) {
+          localStorage.removeItem(storageKey);
+        }
       }
+
       // Criar nova planilha
       const created = await sheetsRequest('POST', '', {
         properties: { title: SHEET_TITLE },
@@ -234,6 +228,7 @@
       await sheetsRequest('PUT', `/${id}/values/Stats!A1:C1?valueInputOption=RAW`, {
         values: [['streak', 'daily_count', 'last_date']]
       });
+      localStorage.setItem(storageKey, id);
       return id;
     }
 
