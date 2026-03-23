@@ -21,29 +21,41 @@
   <script>
     window.MathJax = {
       tex: { inlineMath: [['$', '$']], displayMath: [['$$', '$$']] },
-      startup: { 
-        pageReady: () => { 
-          window.mathJaxLoaded = true; 
-          return MathJax.startup.defaultPageReady(); 
-        } 
+      startup: {
+        pageReady: () => {
+          window.mathJaxLoaded = true;
+          return MathJax.startup.defaultPageReady();
+        }
       }
     };
   </script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
+  <!-- Google Identity Services (OAuth) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Google API Client -->
+  <script src="https://apis.google.com/js/api.js" async defer onload="window.gapiLoaded=true"></script>
+
   <style>
-    /* Transições suaves gerais */
     body { transition: background-color 0.3s ease, color 0.3s ease; }
     .fade-in { animation: fadeIn 0.3s ease-in-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .spinner { border: 3px solid rgba(99,102,241,0.2); border-top-color: #6366f1; border-radius: 50%; width: 28px; height: 28px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased selection:bg-indigo-200 min-h-screen pb-12 transition-colors">
-  
-  <!-- Content is rendered here by JS -->
+
   <div id="app"></div>
 
   <script>
+    // ==========================================
+    // CONFIGURAÇÃO GOOGLE
+    // ==========================================
+    const GOOGLE_CLIENT_ID = '972704820676-vdia9sh186trde1mjv5h87d3igimvj3f.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+    const SHEET_TITLE = 'FísicaCards - Progresso';
+
     // ==========================================
     // DADOS DOS CARTÕES (19 Questões da Lista 2)
     // ==========================================
@@ -74,23 +86,31 @@
     ];
 
     // ==========================================
-    // ESTADO E UTILITÁRIOS (JS Vanilla)
+    // ESTADO
     // ==========================================
     const DAILY_GOAL = 3;
 
     let state = {
-      view: 'home',
+      view: 'login',           // login | home | study | addCard
       darkMode: localStorage.getItem('fc_theme') === 'dark',
       activeDeck: null,
-      appDecks: JSON.parse(localStorage.getItem('fc_decks')) || initialDecks,
+      appDecks: initialDecks,
       queue: [],
       isFlipped: false,
-      progress: JSON.parse(localStorage.getItem('fc_progress')) || {},
-      stats: JSON.parse(localStorage.getItem('fc_stats')) || { streak: 0, lastDate: '', dailyCount: 0 },
+      progress: {},
+      stats: { streak: 0, lastDate: '', dailyCount: 0 },
       isCramMode: false,
-      deferredPrompt: null
+      deferredPrompt: null,
+      // Google
+      user: null,              // { name, email, picture }
+      accessToken: null,
+      spreadsheetId: null,
+      syncStatus: 'idle',      // idle | syncing | ok | error
     };
 
+    // ==========================================
+    // UTILITÁRIOS
+    // ==========================================
     const getTodayStr = () => new Date().toISOString().split('T')[0];
     const addDays = (days) => {
       const d = new Date(); d.setDate(d.getDate() + days);
@@ -105,62 +125,195 @@
       return newArr;
     };
 
-    // Inicializar data (Streak/Daily reset)
-    const today = getTodayStr();
-    if (state.stats.lastDate !== today) {
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-      if (state.stats.lastDate !== yesterday.toISOString().split('T')[0] && state.stats.lastDate !== '') {
-        state.stats.streak = 0;
-      }
-      state.stats.dailyCount = 0;
-      state.stats.lastDate = today;
-      localStorage.setItem('fc_stats', JSON.stringify(state.stats));
-    }
-
-    // Configurar Dark Mode
     if (state.darkMode) document.documentElement.classList.add('dark');
 
     // ==========================================
-    // PWA SETUP DINÂMICO
+    // GOOGLE OAUTH — TOKEN FLOW (sem redirect)
     // ==========================================
-    function setupPWA() {
-      // Manifest Virtual
-      const manifest = {
-        name: "FísicaCards Pro", short_name: "FísicaCards", description: "Flashcards de Termodinâmica",
-        start_url: ".", display: "standalone", background_color: "#0f172a", theme_color: "#4f46e5",
-        icons: [{
-          src: "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="100" fill="#4f46e5"/><path d="M256 120 C180 120 120 180 120 256 C120 332 180 392 256 392 C332 392 392 332 392 256 C392 180 332 120 256 120 Z" fill="#ffffff"/></svg>'),
-          sizes: "512x512", type: "image/svg+xml", purpose: "any maskable"
-        }]
-      };
-      const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-      const link = document.createElement('link');
-      link.rel = 'manifest';
-      link.href = URL.createObjectURL(manifestBlob);
-      document.head.appendChild(link);
+    let tokenClient = null;
 
-      // Service Worker (Para cache offline)
-      const swCode = `
-        self.addEventListener('install', e => self.skipWaiting());
-        self.addEventListener('activate', e => self.clients.claim());
-        self.addEventListener('fetch', e => { e.respondWith(fetch(e.request).catch(() => new Response('PWA Offline Mode'))); });
-      `;
-      const swBlob = new Blob([swCode], {type: 'application/javascript'});
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(console.error);
+    function initGoogleAuth() {
+      if (!window.google) {
+        setTimeout(initGoogleAuth, 200);
+        return;
       }
-
-      // Intercetar prompt de Instalação
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        state.deferredPrompt = e;
-        render(); // Rerender para mostrar o botão
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: SCOPES,
+        callback: async (resp) => {
+          if (resp.error) { console.error(resp); return; }
+          state.accessToken = resp.access_token;
+          // Buscar info do usuário
+          const info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${resp.access_token}` }
+          }).then(r => r.json());
+          state.user = { name: info.name, email: info.email, picture: info.picture };
+          state.view = 'home';
+          render();
+          // Carregar dados da planilha (em background)
+          loadFromSheets();
+        }
       });
     }
-    setupPWA();
+
+    window.googleLogin = () => {
+      if (!tokenClient) { alert('Aguarde o Google carregar...'); return; }
+      tokenClient.requestAccessToken();
+    };
+
+    window.googleLogout = () => {
+      if (state.accessToken) {
+        google.accounts.oauth2.revoke(state.accessToken, () => {});
+      }
+      state.accessToken = null;
+      state.user = null;
+      state.spreadsheetId = null;
+      state.progress = {};
+      state.stats = { streak: 0, lastDate: '', dailyCount: 0 };
+      state.view = 'login';
+      render();
+    };
 
     // ==========================================
-    // FUNÇÕES DE LÓGICA (Acessíveis globalmente)
+    // GOOGLE SHEETS API
+    // ==========================================
+    async function sheetsRequest(method, endpoint, body) {
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets${endpoint}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${state.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (!res.ok) throw new Error(`Sheets API ${res.status}`);
+      return res.json();
+    }
+
+    async function driveRequest(method, endpoint, body) {
+      const res = await fetch(`https://www.googleapis.com/drive/v3${endpoint}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${state.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (!res.ok) throw new Error(`Drive API ${res.status}`);
+      return res.json();
+    }
+
+    // Procura planilha existente ou cria uma nova
+    async function findOrCreateSpreadsheet() {
+      // Buscar no Drive
+      const query = encodeURIComponent(`name='${SHEET_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+      const list = await driveRequest('GET', `/files?q=${query}&fields=files(id,name)`);
+      if (list.files && list.files.length > 0) {
+        return list.files[0].id;
+      }
+      // Criar nova planilha
+      const created = await sheetsRequest('POST', '', {
+        properties: { title: SHEET_TITLE },
+        sheets: [
+          { properties: { title: 'Progresso', sheetId: 0 } },
+          { properties: { title: 'Stats', sheetId: 1 } }
+        ]
+      });
+      const id = created.spreadsheetId;
+      // Cabeçalhos
+      await sheetsRequest('PUT', `/${id}/values/Progresso!A1:C1?valueInputOption=RAW`, {
+        values: [['card_id', 'state', 'next_date']]
+      });
+      await sheetsRequest('PUT', `/${id}/values/Stats!A1:C1?valueInputOption=RAW`, {
+        values: [['streak', 'daily_count', 'last_date']]
+      });
+      return id;
+    }
+
+    async function loadFromSheets() {
+      try {
+        state.syncStatus = 'syncing';
+        render();
+
+        const id = await findOrCreateSpreadsheet();
+        state.spreadsheetId = id;
+
+        // Carregar progresso
+        const progRes = await sheetsRequest('GET', `/${id}/values/Progresso!A2:C1000`);
+        const progRows = progRes.values || [];
+        const progress = {};
+        progRows.forEach(row => {
+          if (row[0]) progress[row[0]] = { state: row[1] || 'learning', next: row[2] || getTodayStr() };
+        });
+        state.progress = progress;
+
+        // Carregar stats
+        const statsRes = await sheetsRequest('GET', `/${id}/values/Stats!A2:C2`);
+        const statsRows = statsRes.values || [];
+        if (statsRows.length > 0 && statsRows[0].length >= 3) {
+          state.stats = {
+            streak: parseInt(statsRows[0][0]) || 0,
+            dailyCount: parseInt(statsRows[0][1]) || 0,
+            lastDate: statsRows[0][2] || ''
+          };
+        }
+
+        // Reset diário
+        const today = getTodayStr();
+        if (state.stats.lastDate !== today) {
+          const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+          if (state.stats.lastDate !== yesterday.toISOString().split('T')[0] && state.stats.lastDate !== '') {
+            state.stats.streak = 0;
+          }
+          state.stats.dailyCount = 0;
+          state.stats.lastDate = today;
+        }
+
+        state.syncStatus = 'ok';
+        render();
+      } catch (err) {
+        console.error('Erro ao carregar sheets:', err);
+        state.syncStatus = 'error';
+        render();
+      }
+    }
+
+    async function saveToSheets() {
+      if (!state.spreadsheetId || !state.accessToken) return;
+      try {
+        state.syncStatus = 'syncing';
+        render();
+
+        // Salvar progresso — limpa e reescreve
+        const progressRows = [['card_id', 'state', 'next_date']];
+        Object.entries(state.progress).forEach(([cardId, p]) => {
+          progressRows.push([cardId, p.state, p.next]);
+        });
+        await sheetsRequest('PUT', `/${state.spreadsheetId}/values/Progresso!A1?valueInputOption=RAW`, {
+          values: progressRows
+        });
+
+        // Salvar stats
+        await sheetsRequest('PUT', `/${state.spreadsheetId}/values/Stats!A1:C2?valueInputOption=RAW`, {
+          values: [
+            ['streak', 'daily_count', 'last_date'],
+            [state.stats.streak, state.stats.dailyCount, state.stats.lastDate]
+          ]
+        });
+
+        state.syncStatus = 'ok';
+        render();
+        // Voltar para idle depois de 2s
+        setTimeout(() => { state.syncStatus = 'idle'; render(); }, 2000);
+      } catch (err) {
+        console.error('Erro ao salvar sheets:', err);
+        state.syncStatus = 'error';
+        render();
+      }
+    }
+
+    // ==========================================
+    // LÓGICA DO APP
     // ==========================================
     window.toggleTheme = () => {
       state.darkMode = !state.darkMode;
@@ -214,12 +367,11 @@
         } else {
           const days = rating === 'easy' ? 4 : 1;
           state.progress[cardId] = { state: rating === 'easy' ? 'mastered' : 'learning', next: addDays(days) };
-          
           if (state.stats.dailyCount === 0) state.stats.streak++;
           state.stats.dailyCount++;
-          localStorage.setItem('fc_stats', JSON.stringify(state.stats));
+          state.stats.lastDate = t;
         }
-        localStorage.setItem('fc_progress', JSON.stringify(state.progress));
+        saveToSheets();
       }
       state.isFlipped = false;
       render();
@@ -229,37 +381,9 @@
       const newQ = document.getElementById('input-q').value;
       const newA = document.getElementById('input-a').value;
       if (!newQ.trim() || !newA.trim()) return;
-      
       const newCard = { id: Date.now(), question: newQ, answer: newA };
       state.appDecks[0].cards.push(newCard);
-      localStorage.setItem('fc_decks', JSON.stringify(state.appDecks));
       window.setView('home');
-    };
-
-    window.exportData = () => {
-      const data = { decks: state.appDecks, progress: state.progress, stats: state.stats };
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `fisicacards_backup_${getTodayStr()}.json`;
-      a.click();
-    };
-
-    window.importData = (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target.result);
-          if (data.decks) { state.appDecks = data.decks; localStorage.setItem('fc_decks', JSON.stringify(data.decks)); }
-          if (data.progress) { state.progress = data.progress; localStorage.setItem('fc_progress', JSON.stringify(data.progress)); }
-          if (data.stats) { state.stats = data.stats; localStorage.setItem('fc_stats', JSON.stringify(data.stats)); }
-          alert('Dados importados com sucesso!');
-          render();
-        } catch (err) { alert('Ficheiro inválido ou corrompido.'); }
-      };
-      reader.readAsText(file);
     };
 
     window.handleInstallApp = async () => {
@@ -269,9 +393,53 @@
       if (outcome === 'accepted') { state.deferredPrompt = null; render(); }
     };
 
+    window.retrySyncError = () => {
+      loadFromSheets();
+    };
+
     // ==========================================
-    // RENDERIZAÇÃO DE HTML TEMPLATES
+    // RENDERIZAÇÃO
     // ==========================================
+    function syncBadge() {
+      if (state.syncStatus === 'syncing') {
+        return `<div class="flex items-center gap-2 text-sm text-indigo-500 font-semibold"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Sincronizando...</div>`;
+      }
+      if (state.syncStatus === 'ok') {
+        return `<div class="flex items-center gap-1 text-sm text-emerald-500 font-semibold"><i data-lucide="cloud" class="w-4 h-4"></i> Salvo</div>`;
+      }
+      if (state.syncStatus === 'error') {
+        return `<button onclick="window.retrySyncError()" class="flex items-center gap-1 text-sm text-rose-500 font-semibold hover:underline"><i data-lucide="cloud-off" class="w-4 h-4"></i> Erro — tentar novamente</button>`;
+      }
+      return `<div class="flex items-center gap-1 text-sm text-slate-400"><i data-lucide="cloud" class="w-4 h-4"></i> Google Sheets</div>`;
+    }
+
+    function renderLogin() {
+      return `
+        <div class="min-h-screen flex flex-col items-center justify-center p-6 fade-in">
+          <div class="text-center mb-10">
+            <div class="flex items-center justify-center gap-3 text-indigo-600 dark:text-indigo-400 mb-4">
+              <i data-lucide="brain" class="w-14 h-14"></i>
+            </div>
+            <h1 class="text-4xl font-black mb-2">FísicaCards Pro</h1>
+            <p class="text-slate-500 text-lg">Flashcards de Termodinâmica com repetição espaçada</p>
+          </div>
+
+          <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border dark:border-slate-700 p-10 w-full max-w-sm text-center">
+            <p class="text-slate-500 mb-8">Faça login para salvar seu progresso na nuvem via Google Sheets.</p>
+            <button onclick="window.googleLogin()" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 dark:bg-slate-700 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-white font-bold py-4 rounded-2xl transition-all shadow-sm text-lg">
+              <svg width="24" height="24" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+              Entrar com Google
+            </button>
+            <p class="text-xs text-slate-400 mt-6">Seu progresso será salvo automaticamente numa planilha no seu Google Drive.</p>
+          </div>
+
+          <button onclick="window.toggleTheme()" class="mt-8 p-3 bg-white dark:bg-slate-800 rounded-full shadow-sm border dark:border-slate-700 text-slate-600 dark:text-slate-300">
+            <i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-5 h-5"></i>
+          </button>
+        </div>
+      `;
+    }
+
     function renderHome() {
       const masteredCount = Object.values(state.progress).filter(p => p.state === 'mastered').length;
       const learningCount = Object.values(state.progress).filter(p => p.state === 'learning').length;
@@ -296,12 +464,6 @@
         </div>
       `).join('');
 
-      let installBtnHtml = state.deferredPrompt ? `
-        <button onclick="window.handleInstallApp()" class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-md">
-          <i data-lucide="smartphone" class="w-5 h-5"></i> Instalar App
-        </button>
-      ` : '';
-
       return `
         <div class="p-4 sm:p-8 max-w-4xl mx-auto fade-in">
           <header class="flex justify-between items-center mb-10">
@@ -309,9 +471,19 @@
               <i data-lucide="brain" class="w-10 h-10"></i>
               <h1 class="text-3xl font-black">FísicaCards</h1>
             </div>
-            <button onclick="window.toggleTheme()" class="p-3 bg-white dark:bg-slate-800 rounded-full shadow-sm border dark:border-slate-700 text-slate-600 dark:text-slate-300">
-              <i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-6 h-6"></i>
-            </button>
+            <div class="flex items-center gap-3">
+              ${syncBadge()}
+              <div class="flex items-center gap-2">
+                <img src="${state.user?.picture || ''}" class="w-9 h-9 rounded-full border-2 border-indigo-300" onerror="this.style.display='none'" />
+                <div class="hidden sm:block text-sm">
+                  <div class="font-bold leading-tight">${state.user?.name || ''}</div>
+                  <button onclick="window.googleLogout()" class="text-xs text-slate-400 hover:text-rose-500 transition-colors">Sair</button>
+                </div>
+              </div>
+              <button onclick="window.toggleTheme()" class="p-2 bg-white dark:bg-slate-800 rounded-full shadow-sm border dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                <i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-5 h-5"></i>
+              </button>
+            </div>
           </header>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
@@ -338,16 +510,9 @@
             <button onclick="window.setView('addCard')" class="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 dark:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all">
               <i data-lucide="plus" class="w-5 h-5"></i> Criar Novo Cartão
             </button>
-            <div class="flex gap-2 w-full sm:w-auto">
-              ${installBtnHtml}
-              <button onclick="window.exportData()" class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                <i data-lucide="download" class="w-5 h-5"></i> Exportar
-              </button>
-              <label class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 py-3 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-                <i data-lucide="upload" class="w-5 h-5"></i> Importar
-                <input type="file" accept=".json" onchange="window.importData(event)" class="hidden" />
-              </label>
-            </div>
+            <button onclick="window.googleLogout()" class="sm:hidden w-full flex items-center justify-center gap-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-6 py-3 rounded-xl font-bold transition-all">
+              <i data-lucide="log-out" class="w-5 h-5"></i> Sair da Conta
+            </button>
           </div>
         </div>
       `;
@@ -355,8 +520,8 @@
 
     function renderStudy() {
       const isGoalMet = state.stats.dailyCount >= DAILY_GOAL;
-      
-      let headerTargetHtml = state.isCramMode 
+
+      let headerTargetHtml = state.isCramMode
         ? `<div class="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 border px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i> Véspera</div>`
         : `<div class="px-4 py-1 rounded-full border text-sm font-bold flex items-center gap-2 ${isGoalMet ? 'bg-amber-100 border-amber-300 text-amber-700' : 'bg-slate-100 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}">
             <i data-lucide="${isGoalMet ? 'flame' : 'target'}" class="w-4 h-4 ${isGoalMet ? 'text-orange-500' : ''}"></i> ${state.stats.dailyCount}/${DAILY_GOAL} Hoje
@@ -389,7 +554,7 @@
               </div>
             ` : ''}
           </div>
-          
+
           <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             ${!state.isFlipped ? `
               <button onclick="window.setIsFlipped(true)" class="bg-slate-900 dark:bg-slate-700 text-white px-12 py-5 rounded-2xl font-bold text-xl shadow-lg hover:scale-105 transition-transform">
@@ -455,28 +620,21 @@
       `;
     }
 
-    // Função Principal de Renderização
     function render() {
       const app = document.getElementById('app');
-      
-      if (state.view === 'home') app.innerHTML = renderHome();
+      if (state.view === 'login') app.innerHTML = renderLogin();
+      else if (state.view === 'home') app.innerHTML = renderHome();
       else if (state.view === 'study') app.innerHTML = renderStudy();
       else if (state.view === 'addCard') app.innerHTML = renderAddCard();
 
-      // Instanciar ícones SVG Lucide
-      if (window.lucide) {
-        lucide.createIcons();
-      }
-
-      // Renderizar Matemática LaTeX
-      if (window.mathJaxLoaded && window.MathJax && window.MathJax.typesetPromise) {
-        MathJax.typesetPromise();
-      }
+      if (window.lucide) lucide.createIcons();
+      if (window.mathJaxLoaded && window.MathJax?.typesetPromise) MathJax.typesetPromise();
     }
 
-    // Arranque inicial
+    // Arranque
     document.addEventListener('DOMContentLoaded', () => {
       render();
+      initGoogleAuth();
     });
 
   </script>
