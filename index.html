@@ -89,9 +89,10 @@
     // ESTADO
     // ==========================================
     const DAILY_GOAL = 3;
+    const RANKING_SHEET_ID = '1g_bOnh8xG3R017qh8sTV_erTEeTklyrusWimPaEeD4E';
 
     let state = {
-      view: 'login',           // login | home | study | addCard
+      view: 'login',           // login | home | study | addCard | ranking
       darkMode: localStorage.getItem('fc_theme') === 'dark',
       activeDeck: null,
       appDecks: initialDecks,
@@ -106,6 +107,8 @@
       accessToken: null,
       spreadsheetId: null,
       syncStatus: 'idle',      // idle | syncing | ok | error
+      ranking: [],             // [{name, email, streak, picture}]
+      rankingLoading: false,
     };
 
     // ==========================================
@@ -307,11 +310,79 @@
         render();
         // Voltar para idle depois de 2s
         setTimeout(() => { state.syncStatus = 'idle'; render(); }, 2000);
+        // Atualizar ranking global
+        updateRanking();
       } catch (err) {
         console.error('Erro ao salvar sheets:', err);
         state.syncStatus = 'error';
         render();
       }
+    }
+
+    // ==========================================
+    // RANKING GLOBAL
+    // ==========================================
+    async function updateRanking() {
+      if (!state.accessToken || !state.user) return;
+      try {
+        // Ler ranking atual
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/Ranking!A2:D1000`, {
+          headers: { Authorization: `Bearer ${state.accessToken}` }
+        });
+        const data = await res.json();
+        const rows = data.values || [];
+
+        // Encontrar linha do usuário atual
+        const myEmail = state.user.email;
+        const myIdx = rows.findIndex(r => r[1] === myEmail);
+        const myRow = [state.user.name, myEmail, state.stats.streak, state.user.picture || ''];
+
+        let updateRange;
+        if (myIdx >= 0) {
+          updateRange = `Ranking!A${myIdx + 2}:D${myIdx + 2}`;
+        } else {
+          updateRange = `Ranking!A${rows.length + 2}:D${rows.length + 2}`;
+        }
+
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/${encodeURIComponent(updateRange)}?valueInputOption=RAW`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [myRow] })
+        });
+
+        // Se a aba não tem cabeçalho ainda, adiciona
+        if (rows.length === 0) {
+          await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/${encodeURIComponent('Ranking!A1:D1')}?valueInputOption=RAW`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: [['name', 'email', 'streak', 'picture']] })
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao atualizar ranking:', err);
+      }
+    }
+
+    async function loadRanking() {
+      state.rankingLoading = true;
+      render();
+      try {
+        // Leitura pública via API key não necessária — usamos o token do usuário logado
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/Ranking!A2:D1000`, {
+          headers: { Authorization: `Bearer ${state.accessToken}` }
+        });
+        const data = await res.json();
+        const rows = data.values || [];
+        state.ranking = rows
+          .filter(r => r[0] && r[2])
+          .map(r => ({ name: r[0], email: r[1], streak: parseInt(r[2]) || 0, picture: r[3] || '' }))
+          .sort((a, b) => b.streak - a.streak);
+      } catch (err) {
+        console.error('Erro ao carregar ranking:', err);
+        state.ranking = [];
+      }
+      state.rankingLoading = false;
+      render();
     }
 
     // ==========================================
@@ -397,6 +468,11 @@
 
     window.retrySyncError = () => {
       loadFromSheets();
+    };
+
+    window.openRanking = () => {
+      state.view = 'ranking';
+      loadRanking();
     };
 
     // ==========================================
@@ -513,6 +589,9 @@
             <button onclick="window.setView('addCard')" class="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 dark:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all">
               <i data-lucide="plus" class="w-5 h-5"></i> Criar Novo Cartão
             </button>
+            <button onclick="window.openRanking()" class="w-full sm:w-auto flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all">
+              <i data-lucide="trophy" class="w-5 h-5"></i> Ranking
+            </button>
             <button onclick="window.googleLogout()" class="sm:hidden w-full flex items-center justify-center gap-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-6 py-3 rounded-xl font-bold transition-all">
               <i data-lucide="log-out" class="w-5 h-5"></i> Sair da Conta
             </button>
@@ -623,12 +702,49 @@
       `;
     }
 
+    function renderRanking() {
+      const medals = ['🥇', '🥈', '🥉'];
+      const myEmail = state.user?.email;
+
+      const rows = state.rankingLoading
+        ? `<div class="flex justify-center py-16"><div class="spinner"></div></div>`
+        : state.ranking.length === 0
+          ? `<p class="text-center text-slate-400 py-16">Nenhum usuário no ranking ainda.</p>`
+          : state.ranking.map((u, i) => `
+              <div class="flex items-center gap-4 p-4 rounded-2xl ${u.email === myEmail ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800' : 'bg-white dark:bg-slate-800 border dark:border-slate-700'} shadow-sm mb-3 fade-in">
+                <div class="text-2xl font-black w-10 text-center">${medals[i] || `#${i + 1}`}</div>
+                <img src="${u.picture}" class="w-10 h-10 rounded-full border-2 border-indigo-300" onerror="this.style.display='none'" />
+                <div class="flex-1">
+                  <div class="font-bold ${u.email === myEmail ? 'text-indigo-600 dark:text-indigo-400' : ''}">${u.name} ${u.email === myEmail ? '(você)' : ''}</div>
+                </div>
+                <div class="flex items-center gap-2 font-black text-xl text-orange-500">
+                  <i data-lucide="flame" class="w-5 h-5"></i> ${u.streak}
+                </div>
+              </div>
+            `).join('');
+
+      return `
+        <div class="p-4 sm:p-8 max-w-2xl mx-auto fade-in">
+          <header class="mb-8 flex items-center justify-between">
+            <button onclick="window.setView('home')" class="flex items-center gap-2 font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors">
+              <i data-lucide="chevron-left" class="w-5 h-5"></i> Voltar
+            </button>
+            <h1 class="text-2xl font-black flex items-center gap-2"><i data-lucide="trophy" class="w-6 h-6 text-amber-500"></i> Ranking Global</h1>
+            <button onclick="window.openRanking()" class="text-sm text-indigo-500 font-bold hover:underline">Atualizar</button>
+          </header>
+          <p class="text-center text-slate-400 text-sm mb-6">Ordenado por dias de streak consecutivos 🔥</p>
+          ${rows}
+        </div>
+      `;
+    }
+
     function render() {
       const app = document.getElementById('app');
       if (state.view === 'login') app.innerHTML = renderLogin();
       else if (state.view === 'home') app.innerHTML = renderHome();
       else if (state.view === 'study') app.innerHTML = renderStudy();
       else if (state.view === 'addCard') app.innerHTML = renderAddCard();
+      else if (state.view === 'ranking') app.innerHTML = renderRanking();
 
       if (window.lucide) lucide.createIcons();
       if (window.mathJaxLoaded && window.MathJax?.typesetPromise) MathJax.typesetPromise();
