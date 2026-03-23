@@ -161,7 +161,9 @@
           state.view = 'home';
           render();
           // Carregar dados da planilha (em background)
-          loadFromSheets();
+          await loadFromSheets();
+          // Registrar no ranking global ao logar
+          updateRanking();
         }
       });
     }
