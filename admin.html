@@ -56,11 +56,14 @@
   // ESTADO
   // ==========================================
   let state = {
-    view: 'login',   // login | dashboard | cards | ranking | editCard | newCard
+    view: 'login',   // login | dashboard | cards | ranking | editCard | newCard | decks | newDeck | editDeck
     accessToken: null,
     ranking: [],
     rankingLoading: false,
     editingCard: null,
+    decks: [],          // baralhos da planilha central
+    decksLoading: false,
+    editingDeck: null,
     darkMode: localStorage.getItem('admin_theme') === 'dark',
   };
 
@@ -81,6 +84,7 @@
         if (resp.error) { alert('Erro no login Google'); return; }
         state.accessToken = resp.access_token;
         loadRanking();
+        loadDecks();
       }
     });
   }
@@ -121,6 +125,42 @@
     render();
   }
 
+  // ==========================================
+  // BARALHOS NA PLANILHA CENTRAL
+  // Formato da aba "Baralhos": id | title | description | cards_json
+  // ==========================================
+  async function loadDecks() {
+    state.decksLoading = true;
+    render();
+    try {
+      // Garante cabeçalho
+      await sheetsPut('Baralhos!A1:D1', [['id', 'title', 'description', 'cards_json']]);
+      const data = await sheetsGet('Baralhos!A2:D1000');
+      const rows = data.values || [];
+      state.decks = rows
+        .filter(r => r[0] && r[1])
+        .map(r => ({
+          id: r[0],
+          title: r[1],
+          description: r[2] || '',
+          cards: (() => { try { return JSON.parse(r[3] || '[]'); } catch(e) { return []; } })()
+        }));
+    } catch (e) {
+      console.error('Erro ao carregar baralhos:', e);
+      state.decks = [];
+    }
+    state.decksLoading = false;
+    render();
+  }
+
+  async function saveDecksToSheet() {
+    const rows = state.decks.map(d => [d.id, d.title, d.description, JSON.stringify(d.cards)]);
+    // Limpa e reescreve
+    const clearRows = Array(Math.max(rows.length + 10, 20)).fill(['', '', '', '']);
+    await sheetsPut('Baralhos!A2:D' + (clearRows.length + 1), clearRows);
+    if (rows.length > 0) await sheetsPut('Baralhos!A2:D' + (rows.length + 1), rows);
+  }
+
   async function removeFromRanking(email) {
     if (!confirm(`Remover ${email} do ranking?`)) return;
     try {
@@ -139,6 +179,98 @@
   // ==========================================
   // RENDER
   // ==========================================
+  function renderDecks() {
+    const rows = state.decksLoading
+      ? `<div class="text-center py-10 text-slate-400">Carregando...</div>`
+      : state.decks.length === 0
+        ? `<div class="text-center py-10 text-slate-400">Nenhum baralho extra criado ainda.</div>`
+        : state.decks.map((d, i) => `
+            <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-6 shadow-sm mb-4 flex justify-between items-center">
+              <div>
+                <div class="font-black text-lg">${d.title}</div>
+                <div class="text-slate-400 text-sm mt-1">${d.description}</div>
+                <div class="text-indigo-500 text-sm font-bold mt-1">${d.cards.length} cartões</div>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="window.editDeck(${i})" class="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-colors">Editar</button>
+                <button onclick="window.deleteDeck(${i})" class="bg-rose-50 dark:bg-rose-900/30 text-rose-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-rose-100 transition-colors">Deletar</button>
+              </div>
+            </div>
+          `).join('');
+
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Baralhos')}
+        <div class="max-w-4xl mx-auto p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-black">${state.decks.length} baralhos extras</h2>
+            <button onclick="window.goTo('newDeck')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold transition-colors">+ Novo Baralho</button>
+          </div>
+          ${rows}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderNewDeck() {
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Novo Baralho')}
+        <div class="max-w-3xl mx-auto p-6">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow border dark:border-slate-700 p-8">
+            <div class="mb-5">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Nome do Baralho</label>
+              <input id="deck-title" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex: Lista 3 - Ondas" />
+            </div>
+            <div class="mb-5">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Descrição</label>
+              <input id="deck-desc" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex: Questões sobre ondas mecânicas" />
+            </div>
+            <div class="mb-8">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Cartões (JSON)</label>
+              <p class="text-xs text-slate-400 mb-2">Formato: <code>[{"id":1,"question":"Pergunta","answer":"Resposta"},...]</code></p>
+              <textarea id="deck-cards" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[200px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder='[{"id":1,"question":"Pergunta aqui","answer":"Resposta aqui"}]'></textarea>
+            </div>
+            <div class="flex gap-3">
+              <button onclick="window.saveNewDeck()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors">Criar Baralho</button>
+              <button onclick="window.goTo('decks')" class="flex-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderEditDeck() {
+    const d = state.editingDeck;
+    return `
+      <div class="min-h-screen fade-in">
+        ${navbar('Editar Baralho')}
+        <div class="max-w-3xl mx-auto p-6">
+          <div class="bg-white dark:bg-slate-800 rounded-2xl shadow border dark:border-slate-700 p-8">
+            <div class="mb-5">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Nome do Baralho</label>
+              <input id="deck-title" value="${d.title}" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div class="mb-5">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Descrição</label>
+              <input id="deck-desc" value="${d.description}" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div class="mb-8">
+              <label class="block text-sm font-bold uppercase tracking-wider text-slate-500 mb-2">Cartões (JSON)</label>
+              <p class="text-xs text-slate-400 mb-2">Formato: <code>[{"id":1,"question":"Pergunta","answer":"Resposta"},...]</code></p>
+              <textarea id="deck-cards" class="w-full bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-4 min-h-[200px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500">${JSON.stringify(d.cards, null, 2)}</textarea>
+            </div>
+            <div class="flex gap-3">
+              <button onclick="window.saveEditDeck()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors">Salvar</button>
+              <button onclick="window.goTo('decks')" class="flex-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 font-bold py-3 rounded-xl transition-colors">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function render() {
     const app = document.getElementById('app');
     if (state.view === 'login') app.innerHTML = renderLogin();
@@ -147,6 +279,9 @@
     else if (state.view === 'ranking') app.innerHTML = renderRanking();
     else if (state.view === 'editCard') app.innerHTML = renderEditCard();
     else if (state.view === 'newCard') app.innerHTML = renderNewCard();
+    else if (state.view === 'decks') app.innerHTML = renderDecks();
+    else if (state.view === 'newDeck') app.innerHTML = renderNewDeck();
+    else if (state.view === 'editDeck') app.innerHTML = renderEditDeck();
   }
 
   function renderLogin() {
@@ -181,6 +316,11 @@
             <div class="text-4xl mb-3">🏆</div>
             <div class="text-xl font-black">Ranking</div>
             <div class="text-slate-400 text-sm mt-1">${state.ranking.length} usuários</div>
+          </button>
+          <button onclick="window.openDecks()" class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-8 shadow hover:shadow-md transition-all text-left hover:border-emerald-400">
+            <div class="text-4xl mb-3">🗂️</div>
+            <div class="text-xl font-black">Baralhos</div>
+            <div class="text-slate-400 text-sm mt-1">${state.decks.length} baralhos extras</div>
           </button>
           <div class="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-8 shadow text-left">
             <div class="text-4xl mb-3">📊</div>
@@ -427,6 +567,58 @@
 
   window.loadRanking = loadRanking;
   window.removeFromRanking = removeFromRanking;
+
+  window.openDecks = () => {
+    state.view = 'decks';
+    loadDecks();
+  };
+
+  window.editDeck = (index) => {
+    state.editingDeck = { ...state.decks[index], index };
+    state.view = 'editDeck';
+    render();
+  };
+
+  window.deleteDeck = async (index) => {
+    if (!confirm(`Deletar baralho "${state.decks[index].title}"?`)) return;
+    state.decks.splice(index, 1);
+    await saveDecksToSheet();
+    render();
+  };
+
+  window.saveNewDeck = async () => {
+    const title = document.getElementById('deck-title').value.trim();
+    const desc = document.getElementById('deck-desc').value.trim();
+    const cardsRaw = document.getElementById('deck-cards').value.trim();
+    if (!title) return alert('Digite o nome do baralho.');
+    let deckCards = [];
+    if (cardsRaw) {
+      try { deckCards = JSON.parse(cardsRaw); }
+      catch (e) { return alert('JSON dos cartões inválido. Verifique o formato.'); }
+    }
+    const newDeck = { id: 'deck_' + Date.now(), title, description: desc, cards: deckCards };
+    state.decks.push(newDeck);
+    await saveDecksToSheet();
+    state.view = 'decks';
+    render();
+  };
+
+  window.saveEditDeck = async () => {
+    const title = document.getElementById('deck-title').value.trim();
+    const desc = document.getElementById('deck-desc').value.trim();
+    const cardsRaw = document.getElementById('deck-cards').value.trim();
+    if (!title) return alert('Digite o nome do baralho.');
+    let deckCards = [];
+    if (cardsRaw) {
+      try { deckCards = JSON.parse(cardsRaw); }
+      catch (e) { return alert('JSON dos cartões inválido. Verifique o formato.'); }
+    }
+    const idx = state.editingDeck.index;
+    state.decks[idx] = { ...state.decks[idx], title, description: desc, cards: deckCards };
+    await saveDecksToSheet();
+    state.view = 'decks';
+    render();
+  };
 
   // ==========================================
   // INIT

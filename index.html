@@ -162,6 +162,8 @@
           render();
           // Carregar dados da planilha (em background)
           await loadFromSheets();
+          // Carregar baralhos extras do admin
+          loadExtraDecks();
           // Registrar no ranking global ao logar
           updateRanking();
         }
@@ -235,6 +237,30 @@
       });
       localStorage.setItem(storageKey, id);
       return id;
+    }
+
+    async function loadExtraDecks() {
+      try {
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${RANKING_SHEET_ID}/values/${encodeURIComponent('Baralhos!A2:D1000')}`, {
+          headers: { Authorization: `Bearer ${state.accessToken}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const rows = data.values || [];
+        const extraDecks = rows
+          .filter(r => r[0] && r[1])
+          .map(r => ({
+            id: r[0],
+            title: r[1],
+            description: r[2] || '',
+            cards: JSON.parse(r[3] || '[]')
+          }));
+        // Manter Lista 2 fixo + extras
+        state.appDecks = [initialDecks[0], ...extraDecks];
+        render();
+      } catch (e) {
+        console.error('Erro ao carregar baralhos extras:', e);
+      }
     }
 
     async function loadFromSheets() {
